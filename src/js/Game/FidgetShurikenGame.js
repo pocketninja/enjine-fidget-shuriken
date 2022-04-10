@@ -1,5 +1,5 @@
 import Game from "enjine/src/js/enjine/Game";
-import {addListener} from "enjine/src/js/enjine/events";
+import {addListener, Event} from "enjine/src/js/enjine/events";
 import World from "enjine/src/js/enjine/ecs/World";
 import CanvasRendererSystem from "enjine/src/js/enjine/systems/CanvasRendererSystem";
 import TransformComponent from "enjine/src/js/enjine/components/TransformComponent";
@@ -8,6 +8,7 @@ import InputManager, {INPUT_CODES} from "enjine/src/js/enjine/managers/InputMana
 import SimpleTickSystem from "enjine/src/js/enjine/systems/SimpleTickSystem";
 import CameraComponent from "enjine/src/js/enjine/components/CameraComponent";
 import {lerp} from "enjine/src/js/enjine/math";
+import Vector from "enjine/src/js/enjine/math/Vector";
 
 
 export default class FidgetShurikenGame extends Game {
@@ -24,6 +25,8 @@ export default class FidgetShurikenGame extends Game {
     #speed = 0;
 
     #shuriken;
+
+    #fingerPosition = false;
 
     constructor() {
         super('FidgetShurikenGame');
@@ -70,11 +73,46 @@ export default class FidgetShurikenGame extends Game {
 
     #setupInput() {
         this.#inputManager = new InputManager(this.#world.getSystem(CanvasRendererSystem).canvas);
-        this.#inputManager.createButton('Touch', INPUT_CODES.Mouse0);
-        this.#inputManager.addButtonCallback('Touch',
+        this.#inputManager.createButton('MouseDrag', INPUT_CODES.Mouse0);
+        this.#inputManager.addButtonCallback('MouseDrag',
             event => this.#touchBegin(event),
             event => this.#touchEnd(event),
         );
+
+        const canvas = this.#canvasRenderSystem.canvas;
+
+        // At the moment Enjine doesn't support touch events, so we'll set that up
+        // manually for now.
+        const buildData = (event) => {
+            const data = {code: INPUT_CODES.Mouse0};
+            data.screenCoordinate = new Vector(
+                event.changedTouches[0].clientX,
+                event.changedTouches[0].clientY
+            );
+            return data;
+        }
+        canvas.addEventListener('touchstart', event => {
+            event.preventDefault();
+            const data = buildData(event);
+            this.#touchBegin(new Event(event, data));
+            this.#fingerPosition = new Vector;
+            return false;
+        });
+        canvas.addEventListener('touchmove', event => {
+            event.preventDefault();
+            this.#fingerPosition.x = event.changedTouches[0].clientX;
+            this.#fingerPosition.y = event.changedTouches[0].clientY;
+            return false;
+        });
+        canvas.addEventListener('touchend', event => {
+            event.preventDefault();
+            const data = buildData(event);
+            this.#touchEnd(new Event(event, data));
+            this.#fingerPosition = false;
+            return false;
+        });
+
+
     }
 
     #createShuriken() {
@@ -122,7 +160,7 @@ export default class FidgetShurikenGame extends Game {
 
         // Get the current position
         this.#positionB = this.#cameraComponent.getWorldCoordinatesFromViewportCoordinates(
-            this.#inputManager.cursorScreenPosition
+            this.#fingerPosition || this.#inputManager.cursorScreenPosition
         );
 
         // calculate the degrees from zero for position A
